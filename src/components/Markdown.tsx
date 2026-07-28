@@ -13,7 +13,7 @@ export default function Markdown({ content }: MarkdownProps) {
     const parts = content.split(/(```[\s\S]*?```)/g);
 
     return (
-      <div className="space-y-3 text-sm leading-relaxed text-gray-800 break-words dark:text-gray-200">
+      <div className="space-y-3 text-sm leading-relaxed text-slate-900 break-words font-normal">
         {parts.map((part, index) => {
           if (!part) return null;
           if (part.startsWith("```") && part.endsWith("```")) {
@@ -107,21 +107,21 @@ function FormattedText({ text }: FormattedTextProps) {
         // 1. Headers
         if (trimmed.startsWith("# ")) {
           return (
-            <h1 key={lineIdx} className="text-xl font-bold text-gray-900 mt-4 mb-2 tracking-tight">
+            <h1 key={lineIdx} className="text-xl font-bold text-slate-900 mt-4 mb-2 tracking-tight">
               {parseInlineMarkdown(trimmed.substring(2))}
             </h1>
           );
         }
         if (trimmed.startsWith("## ")) {
           return (
-            <h2 key={lineIdx} className="text-lg font-semibold text-gray-900 mt-3 mb-2 tracking-tight">
+            <h2 key={lineIdx} className="text-lg font-bold text-slate-900 mt-3 mb-2 tracking-tight">
               {parseInlineMarkdown(trimmed.substring(3))}
             </h2>
           );
         }
         if (trimmed.startsWith("### ")) {
           return (
-            <h3 key={lineIdx} className="text-base font-semibold text-gray-900 mt-2 mb-1">
+            <h3 key={lineIdx} className="text-base font-bold text-slate-900 mt-2 mb-1">
               {parseInlineMarkdown(trimmed.substring(4))}
             </h3>
           );
@@ -130,7 +130,7 @@ function FormattedText({ text }: FormattedTextProps) {
         // 2. Blockquotes
         if (trimmed.startsWith("> ")) {
           return (
-            <blockquote key={lineIdx} className="border-l-2 border-black pl-3 text-gray-500 bg-gray-50/40 py-1">
+            <blockquote key={lineIdx} className="border-l-3 border-indigo-500 pl-3.5 text-slate-700 bg-indigo-50/50 py-1.5 rounded-r-lg font-medium my-2">
               {parseInlineMarkdown(trimmed.substring(2))}
             </blockquote>
           );
@@ -139,9 +139,9 @@ function FormattedText({ text }: FormattedTextProps) {
         // 3. Bullet points
         if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
           return (
-            <div key={lineIdx} className="flex items-start gap-2 pl-4">
-              <span className="text-black mt-1.5 select-none text-[8px]">•</span>
-              <span className="flex-1">{parseInlineMarkdown(trimmed.substring(2))}</span>
+            <div key={lineIdx} className="flex items-start gap-2 pl-3 my-1">
+              <span className="text-indigo-600 font-bold select-none text-base leading-none mt-0.5">•</span>
+              <span className="flex-1 text-slate-900 font-normal leading-relaxed">{parseInlineMarkdown(trimmed.substring(2))}</span>
             </div>
           );
         }
@@ -150,9 +150,9 @@ function FormattedText({ text }: FormattedTextProps) {
         const numMatch = trimmed.match(/^(\d+)\.\s(.*)/);
         if (numMatch) {
           return (
-            <div key={lineIdx} className="flex items-start gap-2 pl-4">
-              <span className="text-black font-medium select-none text-xs min-w-[12px] mt-0.5">{numMatch[1]}.</span>
-              <span className="flex-1">{parseInlineMarkdown(numMatch[2])}</span>
+            <div key={lineIdx} className="flex items-start gap-2 pl-3 my-1">
+              <span className="text-indigo-600 font-bold font-mono select-none text-xs min-w-[16px] mt-0.5">{numMatch[1]}.</span>
+              <span className="flex-1 text-slate-900 font-normal leading-relaxed">{parseInlineMarkdown(numMatch[2])}</span>
             </div>
           );
         }
@@ -163,7 +163,11 @@ function FormattedText({ text }: FormattedTextProps) {
         }
 
         // 6. Normal paragraph line
-        return <p key={lineIdx}>{parseInlineMarkdown(line)}</p>;
+        return (
+          <p key={lineIdx} className="text-slate-900 leading-relaxed font-normal">
+            {parseInlineMarkdown(line)}
+          </p>
+        );
       })}
     </div>
   );
@@ -181,21 +185,21 @@ function parseInlineMarkdown(text: string): React.ReactNode[] {
     if (!part) return null;
     if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
       return (
-        <strong key={index} className="font-bold text-gray-950">
+        <strong key={index} className="font-bold text-slate-950">
           {part.slice(2, -2)}
         </strong>
       );
     }
     if (part.startsWith("*") && part.endsWith("*") && part.length >= 2) {
       return (
-        <em key={index} className="italic text-gray-900">
+        <em key={index} className="italic text-slate-900 font-medium">
           {part.slice(1, -1)}
         </em>
       );
     }
     if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
       return (
-        <code key={index} className="px-1 py-0.5 rounded-sm bg-gray-100 font-mono text-xs text-black border border-gray-200">
+        <code key={index} className="px-1.5 py-0.5 rounded-md bg-indigo-50 font-mono text-xs font-semibold text-indigo-950 border border-indigo-200/80 shadow-2xs">
           {part.slice(1, -1)}
         </code>
       );
