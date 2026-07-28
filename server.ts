@@ -57,7 +57,7 @@ app.post("/api/chat", async (req, res) => {
     res.setHeader("Connection", "keep-alive");
 
     const responseStream = await ai.models.generateContentStream({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: formattedContents,
       config: {
         systemInstruction: "You are TechNova AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",

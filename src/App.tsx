@@ -662,7 +662,7 @@ export default function App() {
         <div className="p-4 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-            <span className="font-mono text-[11px]">Gemini 2.5 Flash</span>
+            <span className="font-mono text-[11px]">Gemini 3.6 Flash</span>
           </div>
           <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400 border border-slate-700">
             Auto-Sync
@@ -759,7 +759,7 @@ export default function App() {
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-1.5 shadow-xs border border-slate-200">
                   <Cpu className="h-3.5 w-3.5 text-emerald-600" />
-                  Gemini 2.5 Flash
+                  Gemini 3.6 Flash
                 </span>
               </div>
 
