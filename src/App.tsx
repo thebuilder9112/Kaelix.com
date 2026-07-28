@@ -27,7 +27,8 @@ import {
   ShieldCheck,
   Terminal,
   Cpu,
-  Eraser
+  Eraser,
+  Key
 } from "lucide-react";
 import { Message, ChatSession } from "./types";
 import Markdown from "./components/Markdown";
@@ -36,18 +37,18 @@ import Markdown from "./components/Markdown";
 async function generateStreamClientSide(
   messages: Message[],
   onChunk: (accumulatedText: string) => void,
+  userCustomKey?: string,
   signal?: AbortSignal
 ): Promise<string> {
   const env = (import.meta as any).env || {};
-  const apiKey = env.VITE_API_KEY || env.VITE_GEMINI_API_KEY;
+  const apiKey = userCustomKey?.trim() || env.VITE_API_KEY || env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
-      "GitHub Pages is a static file host and does not run backend API servers.\n\n" +
-      "To enable Gemini AI on your live GitHub Pages deployment:\n" +
-      "1. Open your repository on GitHub.\n" +
-      "2. Go to Settings > Secrets and variables > Actions.\n" +
-      "3. Click 'New repository secret', name it VITE_API_KEY, and paste your Gemini API key.\n" +
-      "4. Re-run your GitHub Actions deployment workflow."
+      "GitHub Pages is a static file host without a backend server.\n\n" +
+      "To use AI on GitHub Pages:\n" +
+      "1. Click the 'API Key' (🔑) button in the top right header.\n" +
+      "2. Enter your Gemini API key (it will be saved safely in your browser's localStorage).\n\n" +
+      "Or use this app in AI Studio where the server backend manages the API key automatically with zero setup!"
     );
   }
 
@@ -162,6 +163,25 @@ export default function App() {
 
   const [inputMessage, setInputMessage] = useState("");
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
+  const [customApiKey, setCustomApiKey] = useState<string>(() => {
+    return localStorage.getItem("technova_custom_api_key") || "";
+  });
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [keyInputText, setKeyInputText] = useState("");
+
+  const handleSaveApiKey = () => {
+    const trimmed = keyInputText.trim();
+    if (trimmed) {
+      localStorage.setItem("technova_custom_api_key", trimmed);
+      setCustomApiKey(trimmed);
+      showToast("API Key saved for browser mode!");
+    } else {
+      localStorage.removeItem("technova_custom_api_key");
+      setCustomApiKey("");
+      showToast("API Key cleared!");
+    }
+    setIsKeyModalOpen(false);
+  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -410,6 +430,7 @@ export default function App() {
           accumulatedResponse = await generateStreamClientSide(
             currentMessages,
             (text) => setStreamedText(text),
+            customApiKey,
             controller.signal
           );
         } else {
@@ -796,6 +817,18 @@ export default function App() {
                 <span>Export</span>
               </button>
             )}
+
+            <button
+              onClick={() => {
+                setKeyInputText(customApiKey);
+                setIsKeyModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200"
+              title="API Key Settings (for static browser mode)"
+            >
+              <Key className="h-3.5 w-3.5 text-indigo-600" />
+              <span>{customApiKey ? "Key Set" : "API Key"}</span>
+            </button>
           </div>
         </header>
 
@@ -1059,12 +1092,89 @@ export default function App() {
             </form>
 
             <div className="flex items-center justify-between text-center mt-3 text-[11px] text-slate-400 px-1">
-              <span>TechNova AI Assistant • Powered by Gemini 2.5 Flash</span>
+              <span>TechNova AI Assistant • Powered by Gemini 3.6 Flash</span>
               <span>Drafts are saved automatically in session memory</span>
             </div>
           </div>
         </footer>
       </div>
+
+      {/* API Key Modal for Static Deployments */}
+      {isKeyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                  <Key className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Gemini API Key</h3>
+                  <p className="text-xs text-slate-500">For Browser & Static Deployments</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsKeyModalOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-3">
+              <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600 leading-relaxed border border-slate-200/80">
+                <p className="font-semibold text-slate-800 mb-1">How AI Studio API Keys Work:</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li><strong>AI Studio / Cloud Run:</strong> No key needed! The server backend handles authentication automatically.</li>
+                  <li><strong>GitHub Pages:</strong> Since GitHub Pages is static and has no backend server, enter your key below to use Gemini directly in your browser.</li>
+                </ul>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Your Gemini API Key
+                </label>
+                <input
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={keyInputText}
+                  onChange={(e) => setKeyInputText(e.target.value)}
+                  className="w-full rounded-xl bg-slate-50 border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-600/20 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              {customApiKey ? (
+                <button
+                  onClick={() => {
+                    setKeyInputText("");
+                    handleSaveApiKey();
+                  }}
+                  className="text-xs font-semibold text-rose-600 hover:text-rose-700"
+                >
+                  Clear Saved Key
+                </button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsKeyModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveApiKey}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20"
+                >
+                  Save Key
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
