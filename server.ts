@@ -12,9 +12,9 @@ app.use(express.json());
 
 // Initialize Gemini SDK with named parameters
 const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.VITE_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is missing.");
+    throw new Error("VITE_API_KEY environment variable is missing.");
   }
   return new GoogleGenAI({
     apiKey,
@@ -40,7 +40,7 @@ app.post("/api/chat", async (req, res) => {
     } catch (err: any) {
       console.error("Gemini init error:", err.message);
       return res.status(500).json({
-        error: "Gemini API is not configured. Please set your GEMINI_API_KEY in Settings > Secrets.",
+        error: "Gemini API is not configured. Please set your VITE_API_KEY in Settings > Secrets.",
       });
     }
 
@@ -57,7 +57,7 @@ app.post("/api/chat", async (req, res) => {
     res.setHeader("Connection", "keep-alive");
 
     const responseStream = await ai.models.generateContentStream({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: formattedContents,
       config: {
         systemInstruction: "You are TechNova AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",

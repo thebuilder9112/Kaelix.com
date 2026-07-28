@@ -57,7 +57,24 @@ export default function App() {
     const saved = localStorage.getItem("technova_sessions");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((s: any, idx: number) => ({
+            id: s?.id || `session-${Date.now()}-${idx}`,
+            title: s?.title || "New AI Conversation",
+            draft: typeof s?.draft === "string" ? s.draft : "",
+            messages: Array.isArray(s?.messages)
+              ? s.messages.map((m: any, mIdx: number) => ({
+                  id: m?.id || `msg-${mIdx}`,
+                  sender: m?.sender === "user" ? "user" : "model",
+                  text: typeof m?.text === "string" ? m.text : "",
+                  timestamp: m?.timestamp || "",
+                }))
+              : [],
+            createdAt: s?.createdAt || new Date().toISOString(),
+            updatedAt: s?.updatedAt || new Date().toISOString(),
+          }));
+        }
       } catch (e) {
         console.error("Failed to parse sessions from localStorage", e);
       }
@@ -67,10 +84,20 @@ export default function App() {
 
   const [activeSessionId, setActiveSessionId] = useState<string>(() => {
     const savedActive = localStorage.getItem("technova_active_id");
-    if (savedActive && DEFAULT_SESSIONS.some(s => s.id === savedActive || savedActive)) {
+    const savedSessions = localStorage.getItem("technova_sessions");
+    let currentSessions = DEFAULT_SESSIONS;
+    if (savedSessions) {
+      try {
+        const parsed = JSON.parse(savedSessions);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          currentSessions = parsed;
+        }
+      } catch (_) {}
+    }
+    if (savedActive && currentSessions.some(s => s.id === savedActive)) {
       return savedActive;
     }
-    return DEFAULT_SESSIONS[0]?.id || "";
+    return currentSessions[0]?.id || "";
   });
 
   const [inputMessage, setInputMessage] = useState("");
@@ -385,11 +412,17 @@ export default function App() {
   };
 
   // Filtered session list based on search query
-  const filteredSessions = sessions.filter(s =>
-    s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.draft.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.messages.some(m => m.text.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredSessions = sessions.filter(s => {
+    const title = s?.title || "";
+    const draft = s?.draft || "";
+    const msgs = Array.isArray(s?.messages) ? s.messages : [];
+    const query = searchQuery.toLowerCase();
+    return (
+      title.toLowerCase().includes(query) ||
+      draft.toLowerCase().includes(query) ||
+      msgs.some(m => (m?.text || "").toLowerCase().includes(query))
+    );
+  });
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900" id="technova-main-layout">
@@ -510,7 +543,7 @@ export default function App() {
                     <span className="truncate max-w-[150px]">
                       {hasDraft ? (
                         <span className="text-amber-600 font-medium bg-amber-50 px-1.5 py-0.5 rounded italic">Draft saved</span>
-                      ) : session.messages.length > 0 ? (
+                      ) : (session.messages || []).length > 0 ? (
                         session.messages[session.messages.length - 1].text
                       ) : (
                         "Empty"
@@ -562,7 +595,7 @@ export default function App() {
 
         {/* Conversation list */}
         <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 space-y-8 bg-gradient-to-b from-white to-slate-50/50">
-          {!activeSession || activeSession.messages.length === 0 ? (
+          {!activeSession || !activeSession.messages || activeSession.messages.length === 0 ? (
             /* Welcome state when empty messages */
             <div className="mx-auto max-w-2xl px-4 py-16 mt-4 text-center">
               <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-600 mb-6 border border-indigo-200 shadow-inner">

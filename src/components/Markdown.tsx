@@ -6,36 +6,41 @@ interface MarkdownProps {
 }
 
 export default function Markdown({ content }: MarkdownProps) {
-  if (!content) return null;
+  if (!content || typeof content !== "string") return null;
 
-  // Split content by code blocks to separate formatted text from code snippets
-  const parts = content.split(/(```[\s\S]*?```)/g);
+  try {
+    // Split content by code blocks to separate formatted text from code snippets
+    const parts = content.split(/(```[\s\S]*?```)/g);
 
-  return (
-    <div className="space-y-3 text-sm leading-relaxed text-gray-800 break-words dark:text-gray-200">
-      {parts.map((part, index) => {
-        if (part.startsWith("```") && part.endsWith("```")) {
-          // Extract language and code
-          const match = part.match(/```(\w*)\n([\s\S]*?)```/);
-          const lang = match ? match[1] : "";
-          const code = match ? match[2] : part.slice(3, -3);
+    return (
+      <div className="space-y-3 text-sm leading-relaxed text-gray-800 break-words dark:text-gray-200">
+        {parts.map((part, index) => {
+          if (!part) return null;
+          if (part.startsWith("```") && part.endsWith("```")) {
+            // Extract language and code
+            const match = part.match(/```(\w*)\n?([\s\S]*?)```/);
+            const lang = match ? match[1] : "";
+            const code = match ? match[2] : part.slice(3, -3);
 
-          return (
-            <div key={index}>
-              <CodeBlock language={lang} code={code.trim()} />
-            </div>
-          );
-        } else {
-          // Format inline markdown (bold, italic, inline code, lists)
-          return (
-            <div key={index}>
-              <FormattedText text={part} />
-            </div>
-          );
-        }
-      })}
-    </div>
-  );
+            return (
+              <div key={index}>
+                <CodeBlock language={lang || ""} code={(code || "").trim()} />
+              </div>
+            );
+          } else {
+            // Format inline markdown (bold, italic, inline code, lists)
+            return (
+              <div key={index}>
+                <FormattedText text={part} />
+              </div>
+            );
+          }
+        })}
+      </div>
+    );
+  } catch (err) {
+    return <p className="whitespace-pre-wrap">{content}</p>;
+  }
 }
 
 interface CodeBlockProps {
@@ -90,13 +95,14 @@ interface FormattedTextProps {
 }
 
 function FormattedText({ text }: FormattedTextProps) {
+  if (!text || typeof text !== "string") return null;
   // Convert standard line breaks
   const lines = text.split("\n");
 
   return (
     <div className="space-y-2">
       {lines.map((line, lineIdx) => {
-        const trimmed = line.trim();
+        const trimmed = (line || "").trim();
 
         // 1. Headers
         if (trimmed.startsWith("# ")) {
@@ -165,29 +171,29 @@ function FormattedText({ text }: FormattedTextProps) {
 
 // Function to handle inline elements like bold, italic, and code
 function parseInlineMarkdown(text: string): React.ReactNode[] {
-  if (!text) return [];
+  if (!text || typeof text !== "string") return [];
 
   // Match bold (**), italic (* or _), and inline code (`)
-  // We process left to right
   const regex = /(\*\*.*?\*\*|\*.*?\*|`.*?`)/g;
   const parts = text.split(regex);
 
   return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
+    if (!part) return null;
+    if (part.startsWith("**") && part.endsWith("**") && part.length >= 4) {
       return (
         <strong key={index} className="font-bold text-gray-950">
           {part.slice(2, -2)}
         </strong>
       );
     }
-    if (part.startsWith("*") && part.endsWith("*")) {
+    if (part.startsWith("*") && part.endsWith("*") && part.length >= 2) {
       return (
         <em key={index} className="italic text-gray-900">
           {part.slice(1, -1)}
         </em>
       );
     }
-    if (part.startsWith("`") && part.endsWith("`")) {
+    if (part.startsWith("`") && part.endsWith("`") && part.length >= 2) {
       return (
         <code key={index} className="px-1 py-0.5 rounded-sm bg-gray-100 font-mono text-xs text-black border border-gray-200">
           {part.slice(1, -1)}
