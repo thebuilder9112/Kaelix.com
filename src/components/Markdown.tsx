@@ -1,0 +1,199 @@
+import React, { useState } from "react";
+import { Copy, Check } from "lucide-react";
+
+interface MarkdownProps {
+  content: string;
+}
+
+export default function Markdown({ content }: MarkdownProps) {
+  if (!content) return null;
+
+  // Split content by code blocks to separate formatted text from code snippets
+  const parts = content.split(/(```[\s\S]*?```)/g);
+
+  return (
+    <div className="space-y-3 text-sm leading-relaxed text-gray-800 break-words dark:text-gray-200">
+      {parts.map((part, index) => {
+        if (part.startsWith("```") && part.endsWith("```")) {
+          // Extract language and code
+          const match = part.match(/```(\w*)\n([\s\S]*?)```/);
+          const lang = match ? match[1] : "";
+          const code = match ? match[2] : part.slice(3, -3);
+
+          return (
+            <div key={index}>
+              <CodeBlock language={lang} code={code.trim()} />
+            </div>
+          );
+        } else {
+          // Format inline markdown (bold, italic, inline code, lists)
+          return (
+            <div key={index}>
+              <FormattedText text={part} />
+            </div>
+          );
+        }
+      })}
+    </div>
+  );
+}
+
+interface CodeBlockProps {
+  language: string;
+  code: string;
+}
+
+function CodeBlock({ language, code }: CodeBlockProps) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy text", err);
+    }
+  };
+
+  return (
+    <div className="relative my-3 overflow-hidden rounded-xl border border-gray-200 bg-gray-900/90 shadow-md font-mono text-xs text-gray-200">
+      <div className="flex items-center justify-between bg-gray-900/50 px-4 py-2 border-b border-gray-800 text-[10px] uppercase tracking-wider text-gray-400">
+        <span>{language || "code"}</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 rounded-md hover:bg-gray-800 p-1 px-1.5 transition-colors cursor-pointer text-gray-400 hover:text-white"
+          title="Copy to clipboard"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-emerald-400" />
+              <span className="text-emerald-400">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      <div className="overflow-x-auto p-4 max-h-[400px]">
+        <pre className="whitespace-pre">{code}</pre>
+      </div>
+    </div>
+  );
+}
+
+interface FormattedTextProps {
+  text: string;
+}
+
+function FormattedText({ text }: FormattedTextProps) {
+  // Convert standard line breaks
+  const lines = text.split("\n");
+
+  return (
+    <div className="space-y-2">
+      {lines.map((line, lineIdx) => {
+        const trimmed = line.trim();
+
+        // 1. Headers
+        if (trimmed.startsWith("# ")) {
+          return (
+            <h1 key={lineIdx} className="text-xl font-bold text-gray-900 mt-4 mb-2 tracking-tight">
+              {parseInlineMarkdown(trimmed.substring(2))}
+            </h1>
+          );
+        }
+        if (trimmed.startsWith("## ")) {
+          return (
+            <h2 key={lineIdx} className="text-lg font-semibold text-gray-900 mt-3 mb-2 tracking-tight">
+              {parseInlineMarkdown(trimmed.substring(3))}
+            </h2>
+          );
+        }
+        if (trimmed.startsWith("### ")) {
+          return (
+            <h3 key={lineIdx} className="text-base font-semibold text-gray-900 mt-2 mb-1">
+              {parseInlineMarkdown(trimmed.substring(4))}
+            </h3>
+          );
+        }
+
+        // 2. Blockquotes
+        if (trimmed.startsWith("> ")) {
+          return (
+            <blockquote key={lineIdx} className="border-l-2 border-black pl-3 text-gray-500 bg-gray-50/40 py-1">
+              {parseInlineMarkdown(trimmed.substring(2))}
+            </blockquote>
+          );
+        }
+
+        // 3. Bullet points
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+          return (
+            <div key={lineIdx} className="flex items-start gap-2 pl-4">
+              <span className="text-black mt-1.5 select-none text-[8px]">•</span>
+              <span className="flex-1">{parseInlineMarkdown(trimmed.substring(2))}</span>
+            </div>
+          );
+        }
+
+        // 4. Numbered list
+        const numMatch = trimmed.match(/^(\d+)\.\s(.*)/);
+        if (numMatch) {
+          return (
+            <div key={lineIdx} className="flex items-start gap-2 pl-4">
+              <span className="text-black font-medium select-none text-xs min-w-[12px] mt-0.5">{numMatch[1]}.</span>
+              <span className="flex-1">{parseInlineMarkdown(numMatch[2])}</span>
+            </div>
+          );
+        }
+
+        // 5. Empty line
+        if (trimmed === "") {
+          return <div key={lineIdx} className="h-1.5" />;
+        }
+
+        // 6. Normal paragraph line
+        return <p key={lineIdx}>{parseInlineMarkdown(line)}</p>;
+      })}
+    </div>
+  );
+}
+
+// Function to handle inline elements like bold, italic, and code
+function parseInlineMarkdown(text: string): React.ReactNode[] {
+  if (!text) return [];
+
+  // Match bold (**), italic (* or _), and inline code (`)
+  // We process left to right
+  const regex = /(\*\*.*?\*\*|\*.*?\*|`.*?`)/g;
+  const parts = text.split(regex);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className="font-bold text-gray-950">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("*") && part.endsWith("*")) {
+      return (
+        <em key={index} className="italic text-gray-900">
+          {part.slice(1, -1)}
+        </em>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={index} className="px-1 py-0.5 rounded-sm bg-gray-100 font-mono text-xs text-black border border-gray-200">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
