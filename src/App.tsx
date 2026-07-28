@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { GoogleGenAI } from "@google/genai";
 import {
   MessageSquare,
   Plus,
@@ -30,6 +31,53 @@ import {
 } from "lucide-react";
 import { Message, ChatSession } from "./types";
 import Markdown from "./components/Markdown";
+
+// Client-side fallback generator for static host deployments (like GitHub Pages) where Node Express backend API is not available
+async function generateStreamClientSide(
+  messages: Message[],
+  onChunk: (accumulatedText: string) => void,
+  signal?: AbortSignal
+): Promise<string> {
+  const env = (import.meta as any).env || {};
+  const apiKey = env.VITE_API_KEY || env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "GitHub Pages is a static file host and does not run backend API servers.\n\n" +
+      "To enable Gemini AI on your live GitHub Pages deployment:\n" +
+      "1. Open your repository on GitHub.\n" +
+      "2. Go to Settings > Secrets and variables > Actions.\n" +
+      "3. Click 'New repository secret', name it VITE_API_KEY, and paste your Gemini API key.\n" +
+      "4. Re-run your GitHub Actions deployment workflow."
+    );
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+  const formattedContents = messages.map(m => ({
+    role: m.sender === "user" ? "user" : "model",
+    parts: [{ text: m.text }]
+  }));
+
+  const responseStream = await ai.models.generateContentStream({
+    model: "gemini-3.6-flash",
+    contents: formattedContents,
+    config: {
+      systemInstruction: "You are TechNova AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
+    }
+  });
+
+  let accumulated = "";
+  for await (const chunk of responseStream) {
+    if (signal?.aborted) {
+      break;
+    }
+    if (chunk.text) {
+      accumulated += chunk.text;
+      onChunk(accumulated);
+    }
+  }
+
+  return accumulated;
+}
 
 // Initial default sessions with formal enterprise topics
 const DEFAULT_SESSIONS: ChatSession[] = [
@@ -334,53 +382,75 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: currentMessages }),
-        signal: controller.signal
-      });
+    let accumulatedResponse = "";
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+      let response: Response | null = null;
+      let isStaticHost = false;
+
+      try {
+        response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: currentMessages }),
+          signal: controller.signal
+        });
+
+        if (response.status === 405 || response.status === 404) {
+          isStaticHost = true;
+        }
+      } catch (netErr: any) {
+        if (netErr.name === "AbortError") throw netErr;
+        isStaticHost = true;
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder("utf-8");
-      if (!reader) throw new Error("No response body reader.");
+      if (isStaticHost || !response || !response.ok) {
+        if (isStaticHost || (response && (response.status === 405 || response.status === 404))) {
+          // Client-side direct generation for static hosts (GitHub Pages)
+          accumulatedResponse = await generateStreamClientSide(
+            currentMessages,
+            (text) => setStreamedText(text),
+            controller.signal
+          );
+        } else {
+          throw new Error(`HTTP error! status: ${response?.status}`);
+        }
+      } else {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+        if (!reader) throw new Error("No response body reader.");
 
-      let buffer = "";
-      let accumulatedResponse = "";
+        let buffer = "";
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-          const dataStr = trimmed.substring(6);
-          if (dataStr === "[DONE]") {
-            break;
-          }
-
-          try {
-            const parsed = JSON.parse(dataStr);
-            if (parsed.error) {
-              throw new Error(parsed.error);
+            const dataStr = trimmed.substring(6);
+            if (dataStr === "[DONE]") {
+              break;
             }
-            if (parsed.text) {
-              accumulatedResponse += parsed.text;
-              setStreamedText(accumulatedResponse);
+
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+              if (parsed.text) {
+                accumulatedResponse += parsed.text;
+                setStreamedText(accumulatedResponse);
+              }
+            } catch (err) {
+              console.error("Error parsing stream chunk:", err, dataStr);
             }
-          } catch (err) {
-            console.error("Error parsing stream chunk:", err, dataStr);
           }
         }
       }
