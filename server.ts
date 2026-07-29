@@ -60,7 +60,7 @@ app.post("/api/chat", async (req, res) => {
       model: "gemini-3.6-flash",
       contents: formattedContents,
       config: {
-        systemInstruction: "You are TechNova AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
+        systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
       },
     });
 
@@ -100,7 +100,7 @@ async function setupVite() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[TechNova Server] Running on http://localhost:${PORT}`);
+    console.log(`[Kaelix Server] Running on http://localhost:${PORT}`);
   });
 }
 

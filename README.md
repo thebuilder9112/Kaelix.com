@@ -1,4 +1,4 @@
-# TechNova AI - GitHub Pages Deployment Guide
+# Kaelix AI - GitHub Pages Deployment Guide
 
 This project is configured for automated deployment to **GitHub Pages** using GitHub Actions.
 

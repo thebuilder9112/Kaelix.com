@@ -62,7 +62,7 @@ async function generateStreamClientSide(
     model: "gemini-3.6-flash",
     contents: formattedContents,
     config: {
-      systemInstruction: "You are TechNova AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
+      systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
     }
   });
 
@@ -115,7 +115,7 @@ const DEFAULT_SESSIONS: ChatSession[] = [
 
 export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const saved = localStorage.getItem("technova_sessions");
+    const saved = localStorage.getItem("kaelix_sessions") || localStorage.getItem("technova_sessions");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -144,8 +144,8 @@ export default function App() {
   });
 
   const [activeSessionId, setActiveSessionId] = useState<string>(() => {
-    const savedActive = localStorage.getItem("technova_active_id");
-    const savedSessions = localStorage.getItem("technova_sessions");
+    const savedActive = localStorage.getItem("kaelix_active_id") || localStorage.getItem("technova_active_id");
+    const savedSessions = localStorage.getItem("kaelix_sessions") || localStorage.getItem("technova_sessions");
     let currentSessions = DEFAULT_SESSIONS;
     if (savedSessions) {
       try {
@@ -164,7 +164,7 @@ export default function App() {
   const [inputMessage, setInputMessage] = useState("");
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
   const [customApiKey, setCustomApiKey] = useState<string>(() => {
-    return localStorage.getItem("technova_custom_api_key") || "";
+    return localStorage.getItem("kaelix_custom_api_key") || localStorage.getItem("technova_custom_api_key") || "";
   });
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
   const [keyInputText, setKeyInputText] = useState("");
@@ -173,10 +173,11 @@ export default function App() {
   const handleSaveApiKey = () => {
     const trimmed = keyInputText.trim();
     if (trimmed) {
-      localStorage.setItem("technova_custom_api_key", trimmed);
+      localStorage.setItem("kaelix_custom_api_key", trimmed);
       setCustomApiKey(trimmed);
       showToast("API Key saved for browser mode!");
     } else {
+      localStorage.removeItem("kaelix_custom_api_key");
       localStorage.removeItem("technova_custom_api_key");
       setCustomApiKey("");
       showToast("API Key cleared!");
@@ -206,12 +207,12 @@ export default function App() {
   const sessionsRef = useRef(sessions);
   useEffect(() => {
     sessionsRef.current = sessions;
-    localStorage.setItem("technova_sessions", JSON.stringify(sessions));
+    localStorage.setItem("kaelix_sessions", JSON.stringify(sessions));
   }, [sessions]);
 
   // Sync active session ID to local storage
   useEffect(() => {
-    localStorage.setItem("technova_active_id", activeSessionId);
+    localStorage.setItem("kaelix_active_id", activeSessionId);
   }, [activeSessionId]);
 
   // Load and restore draft when activeSessionId changes (subsequent switches)
@@ -597,7 +598,7 @@ export default function App() {
         className={`flex flex-col border-r border-slate-800/90 bg-slate-950 text-slate-300 transition-all duration-300 ease-in-out ${
           isSidebarOpen ? "w-80" : "w-0 overflow-hidden"
         }`}
-        id="technova-sidebar"
+        id="kaelix-sidebar"
       >
         {/* Brand Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-800/60">
@@ -607,7 +608,7 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-display font-bold tracking-tight text-white">TechNova</h1>
+                <h1 className="text-base font-display font-bold tracking-tight text-white">Kaelix</h1>
                 <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-400 border border-indigo-500/20">
                   PRO
                 </span>
@@ -866,7 +867,7 @@ export default function App() {
               </div>
 
               <h3 className="text-3xl font-extrabold font-display text-slate-900 tracking-tight mb-3">
-                Welcome to TechNova AI
+                Welcome to Kaelix AI
               </h3>
               <p className="text-sm text-slate-600 max-w-lg mx-auto mb-8 leading-relaxed font-normal">
                 Your high-performance enterprise AI chat client. Features automatic draft saving across conversation sessions, code synthesis, and structured reasoning.
@@ -982,7 +983,7 @@ export default function App() {
                       <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 text-xs text-slate-400">
                         <div className="flex items-center gap-1.5 font-semibold text-indigo-600 font-display">
                           <Sparkles className="h-3.5 w-3.5" />
-                          <span>TechNova AI</span>
+                          <span>Kaelix AI</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-mono text-[11px] text-slate-400">{msg.timestamp}</span>
@@ -1042,7 +1043,7 @@ export default function App() {
                       <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "150ms" }} />
                       <span className="h-2 w-2 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: "300ms" }} />
                     </div>
-                    <span className="text-xs font-semibold text-slate-600 font-display">TechNova is processing...</span>
+                    <span className="text-xs font-semibold text-slate-600 font-display">Kaelix is processing...</span>
                   </div>
                 </div>
               )}
@@ -1078,7 +1079,7 @@ export default function App() {
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Ask TechNova AI anything or type a prompt... (Shift+Enter for new line)"
+                  placeholder="Ask Kaelix AI anything or type a prompt... (Shift+Enter for new line)"
                   className="w-full min-h-[64px] max-h-[220px] resize-none rounded-2xl bg-transparent py-3.5 pl-5 pr-16 text-[15px] text-slate-800 placeholder-slate-400 focus:outline-none"
                   rows={2}
                   disabled={!activeSession}
@@ -1114,7 +1115,7 @@ export default function App() {
             </form>
 
             <div className="flex items-center justify-between text-center mt-3 text-[11px] text-slate-400 px-1">
-              <span>TechNova AI Assistant • Powered by Gemini 3.6 Flash</span>
+              <span>Kaelix AI Assistant • Powered by Gemini 3.6 Flash</span>
               <span>Drafts are saved automatically in session memory</span>
             </div>
           </div>
