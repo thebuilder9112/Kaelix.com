@@ -41,7 +41,7 @@ async function generateStreamClientSide(
   signal?: AbortSignal
 ): Promise<string> {
   const env = (import.meta as any).env || {};
-  const apiKey = userCustomKey?.trim() || env.VITE_API_KEY || env.VITE_GEMINI_API_KEY;
+  const apiKey = userCustomKey?.trim() || env.GEMINI_API_KEY || env.VITE_API_KEY || env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error(
       "GitHub Pages is a static file host without a backend server.\n\n" +

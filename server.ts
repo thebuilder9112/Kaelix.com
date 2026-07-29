@@ -12,9 +12,9 @@ app.use(express.json());
 
 // Initialize Gemini SDK with named parameters
 const getGeminiClient = () => {
-  const apiKey = process.env.VITE_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_API_KEY || process.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("VITE_API_KEY environment variable is missing.");
+    throw new Error("Gemini API key is missing in environment variables.");
   }
   return new GoogleGenAI({
     apiKey,
@@ -40,7 +40,7 @@ app.post("/api/chat", async (req, res) => {
     } catch (err: any) {
       console.error("Gemini init error:", err.message);
       return res.status(500).json({
-        error: "Gemini API is not configured. Please set your VITE_API_KEY in Settings > Secrets.",
+        error: "Gemini API key is not configured on the server. Please set GEMINI_API_KEY in environment variables.",
       });
     }
 
