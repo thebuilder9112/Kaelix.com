@@ -32,8 +32,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
+    localStorage.removeItem("kaelix_sessions");
+    localStorage.removeItem("kaelix_active_id");
+    localStorage.removeItem("kaelix_custom_api_key");
     localStorage.removeItem("technova_sessions");
     localStorage.removeItem("technova_active_id");
+    localStorage.removeItem("technova_custom_api_key");
     window.location.reload();
   };
 

@@ -122,13 +122,13 @@ export default function App() {
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map((s: any, idx: number) => ({
             id: s?.id || `session-${Date.now()}-${idx}`,
-            title: s?.title || "New AI Conversation",
-            draft: typeof s?.draft === "string" ? s.draft : "",
+            title: typeof s?.title === "string" ? s.title.replace(/TechNova/gi, "Kaelix") : "New AI Conversation",
+            draft: typeof s?.draft === "string" ? s.draft.replace(/TechNova/gi, "Kaelix") : "",
             messages: Array.isArray(s?.messages)
               ? s.messages.map((m: any, mIdx: number) => ({
                   id: m?.id || `msg-${mIdx}`,
                   sender: m?.sender === "user" ? "user" : "model",
-                  text: typeof m?.text === "string" ? m.text : "",
+                  text: typeof m?.text === "string" ? m.text.replace(/TechNova/gi, "Kaelix") : "",
                   timestamp: m?.timestamp || "",
                 }))
               : [],
@@ -352,7 +352,7 @@ export default function App() {
     if (!activeSession) return;
     let exportText = `# ${activeSession.title}\n\n*Exported on ${new Date().toLocaleString()}*\n\n---\n\n`;
     activeSession.messages.forEach((m) => {
-      const senderLabel = m.sender === "user" ? "### 👤 User" : "### 🤖 TechNova AI";
+      const senderLabel = m.sender === "user" ? "### 👤 User" : "### 🤖 Kaelix AI";
       exportText += `${senderLabel} *(${m.timestamp})*\n\n${m.text}\n\n---\n\n`;
     });
 
@@ -584,7 +584,7 @@ export default function App() {
   });
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-900 font-sans text-slate-100 antialiased" id="technova-main-layout">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-900 font-sans text-slate-100 antialiased" id="kaelix-main-layout">
       {/* Toast Popup Notification */}
       {toastMessage && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-slate-800/95 px-4 py-2.5 text-xs font-semibold text-white shadow-xl shadow-slate-950/50 border border-slate-700/80 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
@@ -774,7 +774,7 @@ export default function App() {
       </div>
 
       {/* Main Workspace Canvas */}
-      <div className="flex flex-1 flex-col h-full bg-slate-50 text-slate-900 overflow-hidden relative shadow-2xl" id="technova-chat-area">
+      <div className="flex flex-1 flex-col h-full bg-slate-50 text-slate-900 overflow-hidden relative shadow-2xl" id="kaelix-chat-area">
         {/* Toggle sidebar button when collapsed */}
         {!isSidebarOpen && (
           <button
@@ -792,7 +792,7 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2.5">
                 <h2 className="text-base font-bold text-slate-900 font-display tracking-tight">
-                  {activeSession ? activeSession.title : "TechNova Workspace"}
+                  {activeSession ? activeSession.title : "Kaelix Workspace"}
                 </h2>
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
