@@ -398,11 +398,18 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const effectiveApiKey =
+      import.meta.env.VITE_API_KEY ||
+      import.meta.env.VITE_GEMINI_API_KEY ||
+      (window as any).VITE_API_KEY ||
+      (window as any).GEMINI_API_KEY;
+
     let accumulatedResponse = "";
 
     try {
       let response: Response | null = null;
       let isServerStreamSuccess = false;
+      let isStaticHost = false;
 
       try {
         response = await fetch("/api/chat", {
@@ -416,9 +423,12 @@ export default function App() {
 
         if (response && response.ok) {
           isServerStreamSuccess = true;
+        } else if (response && (response.status === 405 || response.status === 404)) {
+          isStaticHost = true;
         }
       } catch (fetchErr) {
         console.warn("Direct fetch /api/chat failed:", fetchErr);
+        isStaticHost = true;
       }
 
       if (isServerStreamSuccess && response) {
@@ -464,27 +474,11 @@ export default function App() {
           }
         }
       } else {
-        // Server endpoint failed or was unreachable (e.g. 405 Method Not Allowed or 500)
-        let serverErrorMessage = "";
-        if (response) {
-          try {
-            const errJson = await response.json();
-            if (errJson?.error) serverErrorMessage = errJson.error;
-          } catch (e) {
-            if (response.status === 405) {
-              serverErrorMessage = "HTTP 405 Method Not Allowed on API route.";
-            } else {
-              serverErrorMessage = `HTTP error! status: ${response.status}`;
-            }
-          }
-        }
-
-        // Check if we can fallback to client-side GoogleGenAI SDK
-        const clientApiKey = import.meta.env.VITE_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
-        if (clientApiKey) {
-          console.log("Attempting client-side Gemini fallback with VITE_API_KEY...");
+        // Fallback to client-side GoogleGenAI SDK (For static deployments like GitHub Pages or when server is unavailable)
+        if (effectiveApiKey) {
+          console.log("Using client-side Gemini SDK fallback...");
           const { GoogleGenAI } = await import("@google/genai");
-          const ai = new GoogleGenAI({ apiKey: clientApiKey });
+          const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
           const formattedContents = currentMessages.map((msg) => ({
             role: msg.sender === "user" ? "user" : "model",
             parts: [{ text: msg.text }],
@@ -505,7 +499,16 @@ export default function App() {
             }
           }
         } else {
-          throw new Error(serverErrorMessage || "API key (VITE_API_KEY) is missing or endpoint unreachable. Please configure VITE_API_KEY in the Secrets panel.");
+          let serverErrorMessage = "";
+          if (response) {
+            try {
+              const errJson = await response.json();
+              if (errJson?.error) serverErrorMessage = errJson.error;
+            } catch (e) {
+              serverErrorMessage = `HTTP error! status: ${response.status}`;
+            }
+          }
+          throw new Error(serverErrorMessage || "VITE_API_KEY environment variable is missing. Please add VITE_API_KEY to your repository secrets and rebuild.");
         }
       }
 
