@@ -10,11 +10,28 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize Gemini SDK with named parameters
+// Enable CORS for all routes and handle preflight OPTIONS requests
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Initialize Gemini SDK with named parameters & support any API key variable
 const getGeminiClient = () => {
-  const apiKey = process.env.VITE_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey =
+    process.env.VITE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.VITE_GEMINI_API_KEY ||
+    process.env.API_KEY ||
+    process.env.GOOGLE_API_KEY;
+
   if (!apiKey) {
-    throw new Error("VITE_API_KEY environment variable is missing or not set.");
+    throw new Error("VITE_API_KEY or GEMINI_API_KEY environment variable is missing or not set.");
   }
   return new GoogleGenAI({
     apiKey,
@@ -27,9 +44,13 @@ const getGeminiClient = () => {
 };
 
 // API route for streaming chat with Gemini
-app.post("/api/chat", async (req, res) => {
+app.all("/api/chat", async (req, res) => {
+  if (req.method !== "POST") {
+    return res.status(200).json({ status: "ok", message: "Kaelix Chat API endpoint (Use POST for chat generation)" });
+  }
+
   try {
-    const { messages } = req.body;
+    const { messages } = req.body || {};
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "Invalid messages format" });
@@ -41,7 +62,7 @@ app.post("/api/chat", async (req, res) => {
     } catch (err: any) {
       console.error("Gemini init error:", err.message);
       return res.status(500).json({
-        error: "VITE_API_KEY is missing in environment variables. Please configure VITE_API_KEY in the Secrets panel.",
+        error: "VITE_API_KEY or GEMINI_API_KEY is missing in environment variables. Please configure your API key in the Secrets panel.",
       });
     }
 
@@ -78,9 +99,12 @@ app.post("/api/chat", async (req, res) => {
     let friendlyError = rawMsg;
 
     if (rawMsg.includes("leaked") || rawMsg.includes("403") || rawMsg.includes("PERMISSION_DENIED") || rawMsg.includes("API key")) {
-      friendlyError = "The server API key is invalid or revoked. Please update VITE_API_KEY in your environment.";
+      friendlyError = "The server API key is invalid or revoked. Please update VITE_API_KEY or GEMINI_API_KEY in your environment.";
     }
 
+    if (!res.headersSent) {
+      res.setHeader("Content-Type", "text/event-stream");
+    }
     res.write(`data: ${JSON.stringify({ error: friendlyError })}\n\n`);
     res.end();
   }
@@ -92,7 +116,7 @@ async function setupVite() {
     // Development mode
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: "spa",
     });
     app.use(vite.middlewares);

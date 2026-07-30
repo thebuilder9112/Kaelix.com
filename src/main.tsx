@@ -7,12 +7,10 @@ import './index.css';
 // Silence harmless Vite HMR WebSocket connection failure rejections in dev environment
 if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
-    if (
-      event.reason &&
-      (event.reason.message?.includes('WebSocket') ||
-       event.reason.toString?.().includes('WebSocket'))
-    ) {
+    const reasonStr = event.reason ? String(event.reason.message || event.reason) : '';
+    if (reasonStr.toLowerCase().includes('websocket')) {
       event.preventDefault();
+      event.stopPropagation();
     }
   });
 }

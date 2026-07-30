@@ -30,7 +30,10 @@ import {
   Eraser,
   Sun,
   Moon,
-  Settings
+  Settings,
+  Palette,
+  Type,
+  Paintbrush
 } from "lucide-react";
 import { Message, ChatSession } from "./types";
 import Markdown from "./components/Markdown";
@@ -126,15 +129,42 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Theme State (Dark / Light)
+  // Theme & Appearance Customization State
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const savedTheme = localStorage.getItem("kaelix_theme");
     return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
   });
 
+  const [accentColor, setAccentColor] = useState<"indigo" | "emerald" | "violet" | "rose" | "amber" | "cyan">(() => {
+    const saved = localStorage.getItem("kaelix_accent");
+    return ["indigo", "emerald", "violet", "rose", "amber", "cyan"].includes(saved as any) ? (saved as any) : "indigo";
+  });
+
+  const [bgTheme, setBgTheme] = useState<"slate" | "navy" | "forest" | "obsidian" | "zinc">(() => {
+    const saved = localStorage.getItem("kaelix_bg_theme");
+    return ["slate", "navy", "forest", "obsidian", "zinc"].includes(saved as any) ? (saved as any) : "slate";
+  });
+
+  const [fontFamily, setFontFamily] = useState<"sans" | "serif" | "mono">(() => {
+    const saved = localStorage.getItem("kaelix_font");
+    return ["sans", "serif", "mono"].includes(saved as any) ? (saved as any) : "sans";
+  });
+
   useEffect(() => {
     localStorage.setItem("kaelix_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("kaelix_accent", accentColor);
+  }, [accentColor]);
+
+  useEffect(() => {
+    localStorage.setItem("kaelix_bg_theme", bgTheme);
+  }, [bgTheme]);
+
+  useEffect(() => {
+    localStorage.setItem("kaelix_font", fontFamily);
+  }, [fontFamily]);
 
   const toggleTheme = () => {
     setTheme((prev) => {
@@ -371,58 +401,111 @@ export default function App() {
     let accumulatedResponse = "";
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: currentMessages,
-        }),
-        signal: controller.signal
-      });
+      let response: Response | null = null;
+      let isServerStreamSuccess = false;
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      try {
+        response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: currentMessages,
+          }),
+          signal: controller.signal
+        });
+
+        if (response && response.ok) {
+          isServerStreamSuccess = true;
+        }
+      } catch (fetchErr) {
+        console.warn("Direct fetch /api/chat failed:", fetchErr);
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder("utf-8");
-      if (!reader) throw new Error("No response body reader.");
+      if (isServerStreamSuccess && response) {
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder("utf-8");
+        if (!reader) throw new Error("No response body reader.");
 
-      let buffer = "";
+        let buffer = "";
 
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-          const dataStr = trimmed.substring(6);
-          if (dataStr === "[DONE]") {
-            break;
+            const dataStr = trimmed.substring(6);
+            if (dataStr === "[DONE]") {
+              break;
+            }
+
+            let streamItem: any = null;
+            try {
+              streamItem = JSON.parse(dataStr);
+            } catch (err) {
+              console.error("Error parsing JSON chunk:", err, dataStr);
+              continue;
+            }
+
+            if (streamItem?.error) {
+              throw new Error(streamItem.error);
+            }
+
+            if (streamItem?.text) {
+              accumulatedResponse += streamItem.text;
+              setStreamedText(accumulatedResponse);
+            }
           }
-
-          let streamItem: any = null;
+        }
+      } else {
+        // Server endpoint failed or was unreachable (e.g. 405 Method Not Allowed or 500)
+        let serverErrorMessage = "";
+        if (response) {
           try {
-            streamItem = JSON.parse(dataStr);
-          } catch (err) {
-            console.error("Error parsing JSON chunk:", err, dataStr);
-            continue;
+            const errJson = await response.json();
+            if (errJson?.error) serverErrorMessage = errJson.error;
+          } catch (e) {
+            if (response.status === 405) {
+              serverErrorMessage = "HTTP 405 Method Not Allowed on API route.";
+            } else {
+              serverErrorMessage = `HTTP error! status: ${response.status}`;
+            }
           }
+        }
 
-          if (streamItem?.error) {
-            throw new Error(streamItem.error);
-          }
+        // Check if we can fallback to client-side GoogleGenAI SDK
+        const clientApiKey = import.meta.env.VITE_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+        if (clientApiKey) {
+          console.log("Attempting client-side Gemini fallback with VITE_API_KEY...");
+          const { GoogleGenAI } = await import("@google/genai");
+          const ai = new GoogleGenAI({ apiKey: clientApiKey });
+          const formattedContents = currentMessages.map((msg) => ({
+            role: msg.sender === "user" ? "user" : "model",
+            parts: [{ text: msg.text }],
+          }));
 
-          if (streamItem?.text) {
-            accumulatedResponse += streamItem.text;
-            setStreamedText(accumulatedResponse);
+          const responseStream = await ai.models.generateContentStream({
+            model: "gemini-3.6-flash",
+            contents: formattedContents,
+            config: {
+              systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. If anyone asks who created, built, made, or owns this AI, you must always answer that Aum Chauhan and Tirth Pandya made it. Respond clearly and format your output beautifully in clean markdown.",
+            },
+          });
+
+          for await (const chunk of responseStream) {
+            if (chunk.text) {
+              accumulatedResponse += chunk.text;
+              setStreamedText(accumulatedResponse);
+            }
           }
+        } else {
+          throw new Error(serverErrorMessage || "API key (VITE_API_KEY) is missing or endpoint unreachable. Please configure VITE_API_KEY in the Secrets panel.");
         }
       }
 
@@ -523,8 +606,30 @@ export default function App() {
     );
   });
 
+  const fontClass = fontFamily === "mono" ? "font-mono" : fontFamily === "serif" ? "font-serif" : "font-sans";
+
+  const getBgThemeClass = () => {
+    if (theme === "dark") {
+      switch (bgTheme) {
+        case "navy": return "bg-slate-950 bg-gradient-to-b from-slate-950 via-blue-950/40 to-slate-950 text-slate-100";
+        case "forest": return "bg-slate-950 bg-gradient-to-b from-slate-950 via-emerald-950/30 to-slate-950 text-slate-100";
+        case "obsidian": return "bg-slate-950 bg-gradient-to-b from-slate-950 via-purple-950/30 to-slate-950 text-slate-100";
+        case "zinc": return "bg-zinc-900 text-zinc-100";
+        default: return "bg-slate-900 text-slate-100";
+      }
+    } else {
+      switch (bgTheme) {
+        case "navy": return "bg-blue-50/50 text-slate-900";
+        case "forest": return "bg-emerald-50/40 text-slate-900";
+        case "obsidian": return "bg-purple-50/40 text-slate-900";
+        case "zinc": return "bg-zinc-100/70 text-zinc-900";
+        default: return "bg-slate-50 text-slate-900";
+      }
+    }
+  };
+
   return (
-    <div className={`flex h-screen w-screen overflow-hidden font-sans antialiased transition-colors duration-300 ${
+    <div className={`flex h-screen w-screen overflow-hidden antialiased transition-colors duration-300 ${fontClass} ${
       theme === "dark" ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"
     }`} id="kaelix-main-layout">
       {/* Toast Popup Notification */}
@@ -751,9 +856,7 @@ export default function App() {
       </div>
 
       {/* Main Workspace Canvas */}
-      <div className={`flex flex-1 flex-col h-full overflow-hidden relative shadow-2xl transition-colors duration-300 ${
-        theme === "dark" ? "bg-slate-900 text-slate-100" : "bg-slate-50 text-slate-900"
-      }`} id="kaelix-chat-area">
+      <div className={`flex flex-1 flex-col h-full overflow-hidden relative shadow-2xl transition-colors duration-300 ${getBgThemeClass()}`} id="kaelix-chat-area">
         {/* Toggle sidebar button when collapsed */}
         {!isSidebarOpen && (
           <button
@@ -1138,7 +1241,7 @@ export default function App() {
       {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
-          <div className={`w-full max-w-md rounded-2xl p-6 shadow-2xl border transition-colors ${
+          <div className={`w-full max-w-lg rounded-2xl p-6 shadow-2xl border max-h-[90vh] overflow-y-auto transition-colors ${
             theme === "dark" ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-900"
           }`}>
             <div className={`flex items-center justify-between pb-4 border-b ${
@@ -1151,8 +1254,8 @@ export default function App() {
                   <Settings className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className={`text-base font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Settings</h3>
-                  <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Workspace Options & Export</p>
+                  <h3 className={`text-base font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Settings & Customization</h3>
+                  <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Customize workspace themes, colors, fonts & settings</p>
                 </div>
               </div>
               <button
@@ -1165,7 +1268,180 @@ export default function App() {
               </button>
             </div>
 
-            <div className="py-4 space-y-4">
+            <div className="py-4 space-y-5">
+              {/* Theme Preference Option (Dark vs Light) */}
+              <div className={`rounded-xl p-4 border ${
+                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                      theme === "dark" ? "text-slate-300" : "text-slate-700"
+                    }`}>
+                      Theme Mode
+                    </h4>
+                    <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                      Current: {theme === "dark" ? "Dark Theme" : "Light Theme"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={toggleTheme}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer shadow-sm"
+                  >
+                    {theme === "dark" ? (
+                      <>
+                        <Sun className="h-3.5 w-3.5 text-amber-300" />
+                        <span>Switch to Light</span>
+                      </>
+                    ) : (
+                      <>
+                        <Moon className="h-3.5 w-3.5" />
+                        <span>Switch to Dark</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Accent & Highlight Color Picker */}
+              <div className={`rounded-xl p-4 border ${
+                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Palette className="h-4 w-4 text-indigo-400" />
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                    theme === "dark" ? "text-slate-300" : "text-slate-700"
+                  }`}>
+                    Accent & Highlight Color
+                  </h4>
+                </div>
+                <p className={`text-xs mb-3 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                  Choose a signature accent color for buttons, highlights, and active elements.
+                </p>
+                <div className="grid grid-cols-6 gap-2">
+                  {[
+                    { id: "indigo", label: "Indigo", bg: "bg-indigo-600" },
+                    { id: "emerald", label: "Emerald", bg: "bg-emerald-600" },
+                    { id: "violet", label: "Violet", bg: "bg-violet-600" },
+                    { id: "rose", label: "Rose", bg: "bg-rose-600" },
+                    { id: "amber", label: "Amber", bg: "bg-amber-600" },
+                    { id: "cyan", label: "Cyan", bg: "bg-cyan-600" },
+                  ].map((col) => (
+                    <button
+                      key={col.id}
+                      onClick={() => {
+                        setAccentColor(col.id as any);
+                        showToast(`Accent set to ${col.label}`);
+                      }}
+                      className={`h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer border ${
+                        col.bg
+                      } ${
+                        accentColor === col.id
+                          ? "ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-105 shadow-md"
+                          : "opacity-80 hover:opacity-100 border-transparent"
+                      }`}
+                      title={col.label}
+                    >
+                      {accentColor === col.id && <Check className="h-4 w-4 text-white stroke-[3]" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Background Style Palette */}
+              <div className={`rounded-xl p-4 border ${
+                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Paintbrush className="h-4 w-4 text-purple-400" />
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                    theme === "dark" ? "text-slate-300" : "text-slate-700"
+                  }`}>
+                    Background Style & Tint
+                  </h4>
+                </div>
+                <p className={`text-xs mb-3 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                  Select a background color atmosphere for your workspace.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: "slate", name: "Classic Slate", darkBg: "bg-slate-900 border-slate-700", lightBg: "bg-slate-100 border-slate-300" },
+                    { id: "navy", name: "Midnight Navy", darkBg: "bg-blue-950 border-blue-800", lightBg: "bg-blue-50 border-blue-200" },
+                    { id: "forest", name: "Forest Emerald", darkBg: "bg-emerald-950 border-emerald-800", lightBg: "bg-emerald-50 border-emerald-200" },
+                    { id: "obsidian", name: "Obsidian Purple", darkBg: "bg-purple-950 border-purple-800", lightBg: "bg-purple-50 border-purple-200" },
+                    { id: "zinc", name: "Carbon Zinc", darkBg: "bg-zinc-900 border-zinc-700", lightBg: "bg-zinc-100 border-zinc-300" },
+                  ].map((bg) => {
+                    const isSelected = bgTheme === bg.id;
+                    return (
+                      <button
+                        key={bg.id}
+                        onClick={() => {
+                          setBgTheme(bg.id as any);
+                          showToast(`Background set to ${bg.name}`);
+                        }}
+                        className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
+                          theme === "dark" ? bg.darkBg : bg.lightBg
+                        } ${
+                          isSelected
+                            ? "ring-2 ring-indigo-500 border-indigo-500 font-semibold"
+                            : "opacity-75 hover:opacity-100"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs">{bg.name}</span>
+                          {isSelected && <Check className="h-3.5 w-3.5 text-indigo-400" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Typography / Font Selection */}
+              <div className={`rounded-xl p-4 border ${
+                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Type className="h-4 w-4 text-emerald-400" />
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                    theme === "dark" ? "text-slate-300" : "text-slate-700"
+                  }`}>
+                    Typography / Font Family
+                  </h4>
+                </div>
+                <p className={`text-xs mb-3 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                  Choose your preferred font style for reading and typing.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "sans", name: "Modern Sans", fontClass: "font-sans" },
+                    { id: "serif", name: "Elegant Serif", fontClass: "font-serif" },
+                    { id: "mono", name: "Technical Mono", fontClass: "font-mono" },
+                  ].map((f) => {
+                    const isSelected = fontFamily === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => {
+                          setFontFamily(f.id as any);
+                          showToast(`Font set to ${f.name}`);
+                        }}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${f.fontClass} ${
+                          theme === "dark" ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                        } ${
+                          isSelected
+                            ? "ring-2 ring-indigo-500 border-indigo-500 text-indigo-400 font-bold"
+                            : "text-slate-400 hover:text-slate-200"
+                        }`}
+                      >
+                        <span className="block text-sm">Aa</span>
+                        <span className="block text-[10px] mt-0.5">{f.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Export Chat Option */}
               <div className={`rounded-xl p-4 border ${
                 theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
@@ -1197,42 +1473,6 @@ export default function App() {
                   <span>Export Chat to Markdown (.md)</span>
                 </button>
               </div>
-
-              {/* Theme Preference Option */}
-              <div className={`rounded-xl p-4 border ${
-                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className={`text-xs font-bold uppercase tracking-wider ${
-                      theme === "dark" ? "text-slate-300" : "text-slate-700"
-                    }`}>
-                      Appearance
-                    </h4>
-                    <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
-                      Mode: {theme === "dark" ? "Dark Theme" : "Light Theme"}
-                    </p>
-                  </div>
-                  <button
-                    onClick={toggleTheme}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer shadow-sm"
-                  >
-                    {theme === "dark" ? (
-                      <>
-                        <Sun className="h-3.5 w-3.5" />
-                        <span>Light</span>
-                      </>
-                    ) : (
-                      <>
-                        <Moon className="h-3.5 w-3.5" />
-                        <span>Dark</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-
             </div>
 
             <div className={`flex justify-end pt-3 border-t ${
