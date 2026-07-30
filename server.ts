@@ -14,7 +14,7 @@ app.use(express.json());
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_API_KEY || process.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Gemini API key is missing in environment variables.");
+    throw new Error("Gemini API key is not set in environment variables.");
   }
   return new GoogleGenAI({
     apiKey,
@@ -30,6 +30,7 @@ const getGeminiClient = () => {
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages } = req.body;
+
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: "Invalid messages format" });
     }
@@ -40,21 +41,20 @@ app.post("/api/chat", async (req, res) => {
     } catch (err: any) {
       console.error("Gemini init error:", err.message);
       return res.status(500).json({
-        error: "Gemini API key is not configured on the server. Please set GEMINI_API_KEY in environment variables.",
+        error: "Gemini API key is missing in environment variables.",
       });
     }
-
-    // Format history for the Gemini SDK
-    // Gemini SDK expects role: 'user' or 'model' and parts: [{ text: '...' }]
-    const formattedContents = messages.map((msg: any) => ({
-      role: msg.sender === "user" ? "user" : "model",
-      parts: [{ text: msg.text }],
-    }));
 
     // Set headers for Server-Sent Events (SSE) streaming
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+
+    // Format history for the Gemini SDK
+    const formattedContents = messages.map((msg: any) => ({
+      role: msg.sender === "user" ? "user" : "model",
+      parts: [{ text: msg.text }],
+    }));
 
     const responseStream = await ai.models.generateContentStream({
       model: "gemini-3.6-flash",
@@ -66,7 +66,6 @@ app.post("/api/chat", async (req, res) => {
 
     for await (const chunk of responseStream) {
       if (chunk.text) {
-        // SSE data format: data: <payload>\n\n
         res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
       }
     }
@@ -75,7 +74,14 @@ app.post("/api/chat", async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error("Error in /api/chat:", error);
-    res.write(`data: ${JSON.stringify({ error: error.message || "An error occurred while streaming response." })}\n\n`);
+    let rawMsg = error?.message || error?.toString() || "An error occurred while generating response.";
+    let friendlyError = rawMsg;
+
+    if (rawMsg.includes("leaked") || rawMsg.includes("403") || rawMsg.includes("PERMISSION_DENIED") || rawMsg.includes("API key")) {
+      friendlyError = "The server Gemini API key is invalid or revoked. Please update GEMINI_API_KEY in your environment.";
+    }
+
+    res.write(`data: ${JSON.stringify({ error: friendlyError })}\n\n`);
     res.end();
   }
 });

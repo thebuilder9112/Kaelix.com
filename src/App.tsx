@@ -28,59 +28,11 @@ import {
   Terminal,
   Cpu,
   Eraser,
-  Key,
   Sun,
   Moon
 } from "lucide-react";
 import { Message, ChatSession } from "./types";
 import Markdown from "./components/Markdown";
-
-// Client-side fallback generator for static host deployments (like GitHub Pages) where Node Express backend API is not available
-async function generateStreamClientSide(
-  messages: Message[],
-  onChunk: (accumulatedText: string) => void,
-  userCustomKey?: string,
-  signal?: AbortSignal
-): Promise<string> {
-  const env = (import.meta as any).env || {};
-  const apiKey = userCustomKey?.trim() || env.GEMINI_API_KEY || env.VITE_API_KEY || env.VITE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "GitHub Pages is a static file host without a backend server.\n\n" +
-      "To use AI on GitHub Pages:\n" +
-      "1. Click the 'API Key' (🔑) button in the top right header.\n" +
-      "2. Enter your Gemini API key (it will be saved safely in your browser's localStorage).\n\n" +
-      "Or use this app in AI Studio where the server backend manages the API key automatically with zero setup!"
-    );
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-  const formattedContents = messages.map(m => ({
-    role: m.sender === "user" ? "user" : "model",
-    parts: [{ text: m.text }]
-  }));
-
-  const responseStream = await ai.models.generateContentStream({
-    model: "gemini-3.6-flash",
-    contents: formattedContents,
-    config: {
-      systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
-    }
-  });
-
-  let accumulated = "";
-  for await (const chunk of responseStream) {
-    if (signal?.aborted) {
-      break;
-    }
-    if (chunk.text) {
-      accumulated += chunk.text;
-      onChunk(accumulated);
-    }
-  }
-
-  return accumulated;
-}
 
 // Initial default sessions with formal enterprise topics
 const DEFAULT_SESSIONS: ChatSession[] = [
@@ -165,27 +117,7 @@ export default function App() {
 
   const [inputMessage, setInputMessage] = useState("");
   const [loadedSessionId, setLoadedSessionId] = useState<string | null>(null);
-  const [customApiKey, setCustomApiKey] = useState<string>(() => {
-    return localStorage.getItem("kaelix_custom_api_key") || localStorage.getItem("technova_custom_api_key") || "";
-  });
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyInputText, setKeyInputText] = useState("");
   const [sessionToDelete, setSessionToDelete] = useState<ChatSession | null>(null);
-
-  const handleSaveApiKey = () => {
-    const trimmed = keyInputText.trim();
-    if (trimmed) {
-      localStorage.setItem("kaelix_custom_api_key", trimmed);
-      setCustomApiKey(trimmed);
-      showToast("API Key saved for browser mode!");
-    } else {
-      localStorage.removeItem("kaelix_custom_api_key");
-      localStorage.removeItem("technova_custom_api_key");
-      setCustomApiKey("");
-      showToast("API Key cleared!");
-    }
-    setIsKeyModalOpen(false);
-  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -437,73 +369,57 @@ export default function App() {
     let accumulatedResponse = "";
 
     try {
-      let response: Response | null = null;
-      let isStaticHost = false;
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: currentMessages,
+        }),
+        signal: controller.signal
+      });
 
-      try {
-        response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: currentMessages }),
-          signal: controller.signal
-        });
-
-        if (response.status === 405 || response.status === 404) {
-          isStaticHost = true;
-        }
-      } catch (netErr: any) {
-        if (netErr.name === "AbortError") throw netErr;
-        isStaticHost = true;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (isStaticHost || !response || !response.ok) {
-        if (isStaticHost || (response && (response.status === 405 || response.status === 404))) {
-          // Client-side direct generation for static hosts (GitHub Pages)
-          accumulatedResponse = await generateStreamClientSide(
-            currentMessages,
-            (text) => setStreamedText(text),
-            customApiKey,
-            controller.signal
-          );
-        } else {
-          throw new Error(`HTTP error! status: ${response?.status}`);
-        }
-      } else {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder("utf-8");
-        if (!reader) throw new Error("No response body reader.");
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder("utf-8");
+      if (!reader) throw new Error("No response body reader.");
 
-        let buffer = "";
+      let buffer = "";
 
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-            const dataStr = trimmed.substring(6);
-            if (dataStr === "[DONE]") {
-              break;
-            }
+          const dataStr = trimmed.substring(6);
+          if (dataStr === "[DONE]") {
+            break;
+          }
 
-            try {
-              const parsed = JSON.parse(dataStr);
-              if (parsed.error) {
-                throw new Error(parsed.error);
-              }
-              if (parsed.text) {
-                accumulatedResponse += parsed.text;
-                setStreamedText(accumulatedResponse);
-              }
-            } catch (err) {
-              console.error("Error parsing stream chunk:", err, dataStr);
-            }
+          let streamItem: any = null;
+          try {
+            streamItem = JSON.parse(dataStr);
+          } catch (err) {
+            console.error("Error parsing JSON chunk:", err, dataStr);
+            continue;
+          }
+
+          if (streamItem?.error) {
+            throw new Error(streamItem.error);
+          }
+
+          if (streamItem?.text) {
+            accumulatedResponse += streamItem.text;
+            setStreamedText(accumulatedResponse);
           }
         }
       }
@@ -547,10 +463,12 @@ export default function App() {
         }));
       } else {
         console.error("Stream error:", err);
+        const errText = err?.message || "An unexpected system error occurred.";
+
         const errorMessage: Message = {
           id: `msg-${Date.now() + 1}`,
           sender: "model",
-          text: `⚠️ **Response Error:** ${err.message || "An unexpected system error occurred."}`,
+          text: `⚠️ **Response Error:** ${errText}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
         setSessions(prev => prev.map(s => {
@@ -632,8 +550,12 @@ export default function App() {
       >
         {/* Brand Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-800/60">
-          <div className="flex items-center gap-3">
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700 text-white shadow-lg shadow-indigo-500/25 ring-2 ring-indigo-400/30 flex-shrink-0">
+          <button
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className="flex items-center gap-3 cursor-pointer group text-left focus:outline-none"
+            title="Toggle sidebar"
+          >
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700 text-white shadow-lg shadow-indigo-500/25 ring-2 ring-indigo-400/30 flex-shrink-0 group-hover:scale-105 transition-transform">
               <img
                 src="/kaelix-logo.jpg"
                 alt="Kaelix AI Logo"
@@ -647,14 +569,14 @@ export default function App() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-display font-bold tracking-tight text-white">Kaelix</h1>
+                <h1 className="text-base font-display font-bold tracking-tight text-white group-hover:text-indigo-300 transition-colors">Kaelix</h1>
                 <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-400 border border-indigo-500/20">
                   PRO
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 font-mono">Enterprise AI Client</p>
             </div>
-          </div>
+          </button>
           <button
             onClick={() => setIsSidebarOpen(false)}
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
@@ -834,34 +756,47 @@ export default function App() {
         {!isSidebarOpen && (
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className={`absolute top-4 left-4 z-50 rounded-xl p-2.5 shadow-lg border transition-all cursor-pointer ${
+            className={`absolute top-3.5 left-4 z-50 flex items-center gap-2 rounded-xl p-1.5 pr-3 shadow-lg border transition-all cursor-pointer group ${
               theme === "dark"
                 ? "bg-slate-900 text-white border-slate-800 hover:bg-slate-800"
                 : "bg-white text-slate-800 border-slate-200 hover:bg-slate-100"
             }`}
-            title="Expand sidebar"
+            title="Open sidebar"
           >
-            <PanelLeftOpen className="h-5 w-5" />
+            <div className="relative flex h-8 w-8 items-center justify-center rounded-lg overflow-hidden bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700 text-white shadow-xs flex-shrink-0 group-hover:scale-105 transition-transform">
+              <img
+                src="/kaelix-logo.jpg"
+                alt="Kaelix AI Logo"
+                className="h-full w-full object-cover"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+              <Sparkles className="h-4 w-4 absolute" />
+            </div>
+            <span className="text-xs font-bold font-display tracking-tight hidden sm:inline">Kaelix</span>
+            <PanelLeftOpen className="h-4 w-4 text-slate-400 group-hover:text-indigo-400 transition-colors" />
           </button>
         )}
 
         {/* Executive Workspace Header */}
-        <header className={`flex h-16 items-center justify-between px-6 pl-16 md:pl-8 border-b backdrop-blur-md z-10 shadow-xs transition-colors duration-300 ${
+        <header className={`flex h-16 items-center justify-between px-6 ${
+          !isSidebarOpen ? "pl-36 sm:pl-40" : "pl-6"
+        } border-b backdrop-blur-md z-10 shadow-xs transition-colors duration-300 ${
           theme === "dark"
             ? "bg-slate-900/90 border-slate-800 text-slate-100"
             : "bg-white/90 border-slate-200 text-slate-900"
         }`}>
           <div className="flex items-center gap-3">
-            <div>
-              <div className="flex items-center gap-2.5">
-                <h2 className="text-base font-bold font-display tracking-tight">
-                  {activeSession ? activeSession.title : "Kaelix Workspace"}
-                </h2>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Active
-                </span>
-              </div>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-base font-bold font-display tracking-tight">
+                {activeSession ? activeSession.title : "Kaelix Workspace"}
+              </h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Active
+              </span>
             </div>
           </div>
 
@@ -925,18 +860,6 @@ export default function App() {
                 <span className="hidden sm:inline">Delete</span>
               </button>
             )}
-
-            <button
-              onClick={() => {
-                setKeyInputText(customApiKey);
-                setIsKeyModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200"
-              title="API Key Settings (for static browser mode)"
-            >
-              <Key className="h-3.5 w-3.5 text-indigo-600" />
-              <span>{customApiKey ? "Key Set" : "API Key"}</span>
-            </button>
           </div>
         </header>
 
@@ -1254,103 +1177,6 @@ export default function App() {
           </div>
         </footer>
       </div>
-
-      {/* API Key Modal for Static Deployments */}
-      {isKeyModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
-          <div className={`w-full max-w-md rounded-2xl p-6 shadow-2xl border ${
-            theme === "dark" ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-900"
-          }`}>
-            <div className={`flex items-center justify-between pb-4 border-b ${
-              theme === "dark" ? "border-slate-800" : "border-slate-100"
-            }`}>
-              <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-xl border ${
-                  theme === "dark" ? "bg-indigo-950/60 text-indigo-400 border-indigo-800/60" : "bg-indigo-50 text-indigo-600 border-indigo-100"
-                }`}>
-                  <Key className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className={`text-base font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Gemini API Key</h3>
-                  <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>For Browser & Static Deployments</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsKeyModalOpen(false)}
-                className={`rounded-lg p-1 transition-colors cursor-pointer ${
-                  theme === "dark" ? "text-slate-400 hover:bg-slate-800 hover:text-white" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                }`}
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="py-4 space-y-3">
-              <div className={`rounded-xl p-3 text-xs leading-relaxed border ${
-                theme === "dark" ? "bg-slate-800/60 text-slate-300 border-slate-700/80" : "bg-slate-50 text-slate-600 border-slate-200/80"
-              }`}>
-                <p className={`font-semibold mb-1 ${theme === "dark" ? "text-slate-200" : "text-slate-800"}`}>How AI Studio API Keys Work:</p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li><strong>AI Studio / Cloud Run:</strong> No key needed! The server backend handles authentication automatically.</li>
-                  <li><strong>GitHub Pages:</strong> Since GitHub Pages is static and has no backend server, enter your key below to use Gemini directly in your browser.</li>
-                </ul>
-              </div>
-
-              <div>
-                <label className={`block text-xs font-bold uppercase tracking-wider mb-1 ${
-                  theme === "dark" ? "text-slate-400" : "text-slate-500"
-                }`}>
-                  Your Gemini API Key
-                </label>
-                <input
-                  type="password"
-                  placeholder="AIzaSy..."
-                  value={keyInputText}
-                  onChange={(e) => setKeyInputText(e.target.value)}
-                  className={`w-full rounded-xl border px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
-                    theme === "dark"
-                      ? "bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500 focus:bg-slate-800/90 focus:border-indigo-500"
-                      : "bg-slate-50 border-slate-300 text-slate-800 placeholder-slate-400 focus:bg-white focus:border-indigo-600"
-                  }`}
-                />
-              </div>
-            </div>
-
-            <div className={`flex items-center justify-between pt-3 border-t ${
-              theme === "dark" ? "border-slate-800" : "border-slate-100"
-            }`}>
-              {customApiKey ? (
-                <button
-                  onClick={() => {
-                    setKeyInputText("");
-                    handleSaveApiKey();
-                  }}
-                  className="text-xs font-semibold text-rose-500 hover:text-rose-400 cursor-pointer"
-                >
-                  Clear Saved Key
-                </button>
-              ) : <div />}
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsKeyModalOpen(false)}
-                  className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer ${
-                    theme === "dark" ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveApiKey}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-600/20 cursor-pointer"
-                >
-                  Save Key
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete Session Confirmation Modal */}
       {sessionToDelete && (
