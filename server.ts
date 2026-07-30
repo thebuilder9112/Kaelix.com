@@ -12,9 +12,9 @@ app.use(express.json());
 
 // Initialize Gemini SDK with named parameters
 const getGeminiClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  const apiKey = process.env.VITE_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Gemini API key is not set in environment variables.");
+    throw new Error("VITE_API_KEY environment variable is missing or not set.");
   }
   return new GoogleGenAI({
     apiKey,
@@ -41,7 +41,7 @@ app.post("/api/chat", async (req, res) => {
     } catch (err: any) {
       console.error("Gemini init error:", err.message);
       return res.status(500).json({
-        error: "Gemini API key is missing in environment variables.",
+        error: "VITE_API_KEY is missing in environment variables. Please configure VITE_API_KEY in the Secrets panel.",
       });
     }
 
@@ -60,7 +60,7 @@ app.post("/api/chat", async (req, res) => {
       model: "gemini-3.6-flash",
       contents: formattedContents,
       config: {
-        systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. Respond clearly and format your output beautifully in clean markdown.",
+        systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. If anyone asks who created, built, made, or owns this AI, you must always answer that Aum Chauhan and Tirth Pandya made it. Respond clearly and format your output beautifully in clean markdown.",
       },
     });
 
@@ -78,7 +78,7 @@ app.post("/api/chat", async (req, res) => {
     let friendlyError = rawMsg;
 
     if (rawMsg.includes("leaked") || rawMsg.includes("403") || rawMsg.includes("PERMISSION_DENIED") || rawMsg.includes("API key")) {
-      friendlyError = "The server Gemini API key is invalid or revoked. Please update GEMINI_API_KEY in your environment.";
+      friendlyError = "The server API key is invalid or revoked. Please update VITE_API_KEY in your environment.";
     }
 
     res.write(`data: ${JSON.stringify({ error: friendlyError })}\n\n`);

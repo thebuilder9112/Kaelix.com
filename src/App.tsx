@@ -29,7 +29,8 @@ import {
   Cpu,
   Eraser,
   Sun,
-  Moon
+  Moon,
+  Settings
 } from "lucide-react";
 import { Message, ChatSession } from "./types";
 import Markdown from "./components/Markdown";
@@ -123,6 +124,7 @@ export default function App() {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitleText, setEditTitleText] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Theme State (Dark / Light)
   const [theme, setTheme] = useState<"dark" | "light">(() => {
@@ -570,11 +572,7 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-display font-bold tracking-tight text-white group-hover:text-indigo-300 transition-colors">Kaelix</h1>
-                <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-400 border border-indigo-500/20">
-                  PRO
-                </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-mono">Enterprise AI Client</p>
             </div>
           </button>
           <button
@@ -723,24 +721,28 @@ export default function App() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-            <span className="font-mono text-[11px]">Gemini 3.6 Flash</span>
-          </div>
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between text-xs text-slate-400">
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+            title="Open Settings"
+          >
+            <Settings className="h-3.5 w-3.5 text-indigo-400" />
+            <span>Settings</span>
+          </button>
           <button
             onClick={toggleTheme}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
             title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
           >
             {theme === "dark" ? (
               <>
-                <Sun className="h-3 w-3 text-amber-400" />
+                <Sun className="h-3.5 w-3.5 text-amber-400" />
                 <span>Light</span>
               </>
             ) : (
               <>
-                <Moon className="h-3 w-3 text-indigo-400" />
+                <Moon className="h-3.5 w-3.5 text-indigo-400" />
                 <span>Dark</span>
               </>
             )}
@@ -801,28 +803,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Theme Toggle Button */}
-            <button
-              onClick={toggleTheme}
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors cursor-pointer border ${
-                theme === "dark"
-                  ? "text-slate-200 bg-slate-800 hover:bg-slate-700 border-slate-700"
-                  : "text-slate-700 bg-slate-100 hover:bg-slate-200 border-slate-200"
-              }`}
-              title={`Switch to ${theme === "dark" ? "Light" : "Dark"} mode`}
-            >
-              {theme === "dark" ? (
-                <>
-                  <Sun className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Light Mode</span>
-                </>
-              ) : (
-                <>
-                  <Moon className="h-3.5 w-3.5 text-indigo-600" />
-                  <span className="hidden sm:inline">Dark Mode</span>
-                </>
-              )}
-            </button>
             {activeSession?.draft && (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-xs">
@@ -837,28 +817,6 @@ export default function App() {
                   <Eraser className="h-4 w-4" />
                 </button>
               </div>
-            )}
-
-            {activeSession && (activeSession.messages || []).length > 0 && (
-              <button
-                onClick={handleExportChat}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-slate-200"
-                title="Export session to Markdown"
-              >
-                <Download className="h-3.5 w-3.5 text-slate-600" />
-                <span>Export</span>
-              </button>
-            )}
-
-            {activeSession && (
-              <button
-                onClick={() => handleDeleteSession(activeSession)}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors cursor-pointer border border-rose-200"
-                title="Delete this chat session"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-                <span className="hidden sm:inline">Delete</span>
-              </button>
             )}
           </div>
         </header>
@@ -1170,13 +1128,128 @@ export default function App() {
               </div>
             </form>
 
-            <div className="flex items-center justify-between text-center mt-3 text-[11px] text-slate-400 px-1">
-              <span>Kaelix AI Assistant • Powered by Gemini 3.6 Flash</span>
-              <span>Drafts are saved automatically in session memory</span>
+            <div className="text-center mt-2.5 text-[11px] text-slate-400">
+              <span>Kaelix can make mistakes. Verify important info.</span>
             </div>
           </div>
         </footer>
       </div>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-xs p-4">
+          <div className={`w-full max-w-md rounded-2xl p-6 shadow-2xl border transition-colors ${
+            theme === "dark" ? "bg-slate-900 border-slate-800 text-slate-100" : "bg-white border-slate-200 text-slate-900"
+          }`}>
+            <div className={`flex items-center justify-between pb-4 border-b ${
+              theme === "dark" ? "border-slate-800" : "border-slate-100"
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`p-2 rounded-xl border ${
+                  theme === "dark" ? "bg-indigo-950/60 text-indigo-400 border-indigo-800/60" : "bg-indigo-50 text-indigo-600 border-indigo-100"
+                }`}>
+                  <Settings className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className={`text-base font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>Settings</h3>
+                  <p className={`text-xs ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>Workspace Options & Export</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className={`rounded-lg p-1 transition-colors cursor-pointer ${
+                  theme === "dark" ? "text-slate-400 hover:bg-slate-800 hover:text-white" : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                }`}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              {/* Export Chat Option */}
+              <div className={`rounded-xl p-4 border ${
+                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="mb-2">
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                    theme === "dark" ? "text-slate-300" : "text-slate-700"
+                  }`}>
+                    Export Conversation
+                  </h4>
+                  <p className={`text-xs mt-1 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                    {activeSession && (activeSession.messages || []).length > 0
+                      ? `Export "${activeSession.title}" (${activeSession.messages.length} messages) as a Markdown file.`
+                      : "Start a conversation to enable exporting."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    handleExportChat();
+                  }}
+                  disabled={!activeSession || (activeSession.messages || []).length === 0}
+                  className={`w-full mt-2 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                    !activeSession || (activeSession.messages || []).length === 0
+                      ? "opacity-50 cursor-not-allowed bg-slate-800 text-slate-500 border border-slate-700"
+                      : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20"
+                  }`}
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Export Chat to Markdown (.md)</span>
+                </button>
+              </div>
+
+              {/* Theme Preference Option */}
+              <div className={`rounded-xl p-4 border ${
+                theme === "dark" ? "bg-slate-800/50 border-slate-800" : "bg-slate-50 border-slate-200"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className={`text-xs font-bold uppercase tracking-wider ${
+                      theme === "dark" ? "text-slate-300" : "text-slate-700"
+                    }`}>
+                      Appearance
+                    </h4>
+                    <p className={`text-xs mt-0.5 ${theme === "dark" ? "text-slate-400" : "text-slate-500"}`}>
+                      Mode: {theme === "dark" ? "Dark Theme" : "Light Theme"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={toggleTheme}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer shadow-sm"
+                  >
+                    {theme === "dark" ? (
+                      <>
+                        <Sun className="h-3.5 w-3.5" />
+                        <span>Light</span>
+                      </>
+                    ) : (
+                      <>
+                        <Moon className="h-3.5 w-3.5" />
+                        <span>Dark</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+
+            </div>
+
+            <div className={`flex justify-end pt-3 border-t ${
+              theme === "dark" ? "border-slate-800" : "border-slate-100"
+            }`}>
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  theme === "dark" ? "bg-slate-800 hover:bg-slate-700 text-slate-200" : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                }`}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Session Confirmation Modal */}
       {sessionToDelete && (
