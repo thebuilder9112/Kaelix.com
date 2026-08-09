@@ -7,6 +7,22 @@ export default defineConfig(() => {
   return {
     base: './',
     plugins: [react(), tailwindcss()],
+    define: {
+      'import.meta.env.VITE_API_KEY': JSON.stringify(
+        process.env.VITE_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.VITE_GEMINI_API_KEY ||
+        process.env.API_KEY ||
+        ''
+      ),
+      'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(
+        process.env.VITE_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.VITE_GEMINI_API_KEY ||
+        process.env.API_KEY ||
+        ''
+      ),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

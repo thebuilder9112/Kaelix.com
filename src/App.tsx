@@ -398,6 +398,8 @@ export default function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    const isGitHubPages = typeof window !== "undefined" && window.location.hostname.includes("github.io");
+
     const effectiveApiKey =
       import.meta.env.VITE_API_KEY ||
       import.meta.env.VITE_GEMINI_API_KEY ||
@@ -407,108 +409,115 @@ export default function App() {
     let accumulatedResponse = "";
 
     try {
-      let response: Response | null = null;
-      let isServerStreamSuccess = false;
-      let isStaticHost = false;
+      if (effectiveApiKey) {
+        // Direct Client-Side Gemini Stream with Bundled Key (GitHub Pages & Client-side)
+        const { GoogleGenAI } = await import("@google/genai");
+        const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
+        const formattedContents = currentMessages.map((msg) => ({
+          role: msg.sender === "user" ? "user" : "model",
+          parts: [{ text: msg.text }],
+        }));
 
-      try {
-        response = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: currentMessages,
-          }),
-          signal: controller.signal
+        const responseStream = await ai.models.generateContentStream({
+          model: "gemini-3.6-flash",
+          contents: formattedContents,
+          config: {
+            systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. If anyone asks who created, built, made, or owns this AI, you must always answer that Aum Chauhan and Tirth Pandya made it. Respond clearly and format your output beautifully in clean markdown.",
+          },
         });
 
-        if (response && response.ok) {
-          isServerStreamSuccess = true;
-        } else if (response && (response.status === 405 || response.status === 404)) {
-          isStaticHost = true;
-        }
-      } catch (fetchErr) {
-        console.warn("Direct fetch /api/chat failed:", fetchErr);
-        isStaticHost = true;
-      }
-
-      if (isServerStreamSuccess && response) {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder("utf-8");
-        if (!reader) throw new Error("No response body reader.");
-
-        let buffer = "";
-
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
-
-            const dataStr = trimmed.substring(6);
-            if (dataStr === "[DONE]") {
-              break;
-            }
-
-            let streamItem: any = null;
-            try {
-              streamItem = JSON.parse(dataStr);
-            } catch (err) {
-              console.error("Error parsing JSON chunk:", err, dataStr);
-              continue;
-            }
-
-            if (streamItem?.error) {
-              throw new Error(streamItem.error);
-            }
-
-            if (streamItem?.text) {
-              accumulatedResponse += streamItem.text;
-              setStreamedText(accumulatedResponse);
-            }
+        for await (const chunk of responseStream) {
+          if (chunk.text) {
+            accumulatedResponse += chunk.text;
+            setStreamedText(accumulatedResponse);
           }
         }
       } else {
-        // Fallback to client-side GoogleGenAI SDK (For static deployments like GitHub Pages or when server is unavailable)
-        if (effectiveApiKey) {
-          console.log("Using client-side Gemini SDK fallback...");
-          const { GoogleGenAI } = await import("@google/genai");
-          const ai = new GoogleGenAI({ apiKey: effectiveApiKey });
-          const formattedContents = currentMessages.map((msg) => ({
-            role: msg.sender === "user" ? "user" : "model",
-            parts: [{ text: msg.text }],
-          }));
+        // Server-Side Stream Fallback for Full-Stack Node/Express container environments
+        let response: Response | null = null;
+        let isServerStreamSuccess = false;
 
-          const responseStream = await ai.models.generateContentStream({
-            model: "gemini-3.6-flash",
-            contents: formattedContents,
-            config: {
-              systemInstruction: "You are Kaelix AI, a helpful, friendly, and intelligent chat assistant. If anyone asks who created, built, made, or owns this AI, you must always answer that Aum Chauhan and Tirth Pandya made it. Respond clearly and format your output beautifully in clean markdown.",
-            },
-          });
+        if (!isGitHubPages) {
+          try {
+            response = await fetch("/api/chat", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                messages: currentMessages,
+              }),
+              signal: controller.signal
+            });
 
-          for await (const chunk of responseStream) {
-            if (chunk.text) {
-              accumulatedResponse += chunk.text;
-              setStreamedText(accumulatedResponse);
+            if (response && response.ok) {
+              isServerStreamSuccess = true;
+            }
+          } catch (fetchErr) {
+            console.warn("Direct fetch /api/chat failed:", fetchErr);
+          }
+        }
+
+        if (isServerStreamSuccess && response) {
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder("utf-8");
+          if (!reader) throw new Error("No response body reader.");
+
+          let buffer = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+              const dataStr = trimmed.substring(6);
+              if (dataStr === "[DONE]") {
+                break;
+              }
+
+              let streamItem: any = null;
+              try {
+                streamItem = JSON.parse(dataStr);
+              } catch (err) {
+                console.error("Error parsing JSON chunk:", err, dataStr);
+                continue;
+              }
+
+              if (streamItem?.error) {
+                throw new Error(streamItem.error);
+              }
+
+              if (streamItem?.text) {
+                accumulatedResponse += streamItem.text;
+                setStreamedText(accumulatedResponse);
+              }
             }
           }
         } else {
-          let serverErrorMessage = "";
-          if (response) {
-            try {
-              const errJson = await response.json();
-              if (errJson?.error) serverErrorMessage = errJson.error;
-            } catch (e) {
-              serverErrorMessage = `HTTP error! status: ${response.status}`;
+          if (isGitHubPages) {
+            throw new Error(
+              "VITE_API_KEY secret is not yet embedded in the live static build. Because GitHub Pages is static, adding a repository secret requires re-running the deployment workflow. Please go to your GitHub repository -> 'Actions' tab -> click 'Build and Deploy to GitHub Pages' -> click 'Run workflow' to deploy the new build with your VITE_API_KEY."
+            );
+          } else {
+            let serverErrMsg = "";
+            if (response) {
+              try {
+                const errJson = await response.json();
+                if (errJson?.error) serverErrMsg = errJson.error;
+              } catch (e) {
+                // Ignore json parse error
+              }
             }
+            throw new Error(
+              serverErrMsg ||
+              "VITE_API_KEY or GEMINI_API_KEY environment variable is not configured. Please set VITE_API_KEY in your environment or repository secrets."
+            );
           }
-          throw new Error(serverErrorMessage || "VITE_API_KEY environment variable is missing. Please add VITE_API_KEY to your repository secrets and rebuild.");
         }
       }
 
