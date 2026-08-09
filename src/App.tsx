@@ -403,8 +403,7 @@ export default function App() {
     const effectiveApiKey =
       import.meta.env.VITE_API_KEY ||
       import.meta.env.VITE_GEMINI_API_KEY ||
-      (window as any).VITE_API_KEY ||
-      (window as any).GEMINI_API_KEY;
+      (window as any).VITE_API_KEY;
 
     let accumulatedResponse = "";
 
@@ -515,7 +514,7 @@ export default function App() {
             }
             throw new Error(
               serverErrMsg ||
-              "VITE_API_KEY or GEMINI_API_KEY environment variable is not configured. Please set VITE_API_KEY in your environment or repository secrets."
+              "VITE_API_KEY environment variable is not configured. Please set VITE_API_KEY in your repository secrets."
             );
           }
         }

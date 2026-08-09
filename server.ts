@@ -31,7 +31,7 @@ const getGeminiClient = () => {
     process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("VITE_API_KEY or GEMINI_API_KEY environment variable is missing or not set.");
+    throw new Error("VITE_API_KEY environment variable is missing or not set.");
   }
   return new GoogleGenAI({
     apiKey,
