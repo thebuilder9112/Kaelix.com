@@ -21,26 +21,30 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize Gemini SDK with named parameters & support any API key variable
+// Initialize Gemini SDK with named parameters & support AI Studio environment variables
+let aiClient: GoogleGenAI | null = null;
+
 const getGeminiClient = () => {
   const apiKey =
-    process.env.VITE_API_KEY ||
     process.env.GEMINI_API_KEY ||
-    process.env.VITE_GEMINI_API_KEY ||
+    process.env.VITE_API_KEY ||
     process.env.API_KEY ||
     process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
-    throw new Error("VITE_API_KEY environment variable is missing or not set.");
+    throw new Error("GEMINI_API_KEY is missing. Please configure your API key in AI Studio Settings.");
   }
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
+  if (!aiClient) {
+    aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
       },
-    },
-  });
+    });
+  }
+  return aiClient;
 };
 
 // API route for streaming chat with Gemini
@@ -56,13 +60,13 @@ app.all("/api/chat", async (req, res) => {
       return res.status(400).json({ error: "Invalid messages format" });
     }
 
-    let ai;
+    let ai: GoogleGenAI;
     try {
       ai = getGeminiClient();
     } catch (err: any) {
       console.error("Gemini init error:", err.message);
       return res.status(500).json({
-        error: "VITE_API_KEY or GEMINI_API_KEY is missing in environment variables. Please configure your API key in the Secrets panel.",
+        error: "GEMINI_API_KEY is not configured. Please ensure your API key is configured in AI Studio Settings.",
       });
     }
 
@@ -99,7 +103,7 @@ app.all("/api/chat", async (req, res) => {
     let friendlyError = rawMsg;
 
     if (rawMsg.includes("leaked") || rawMsg.includes("403") || rawMsg.includes("PERMISSION_DENIED") || rawMsg.includes("API key")) {
-      friendlyError = "The server API key is invalid or revoked. Please update VITE_API_KEY or GEMINI_API_KEY in your environment.";
+      friendlyError = "The Gemini API key is invalid or revoked. Please update your API key in AI Studio Settings.";
     }
 
     if (!res.headersSent) {
